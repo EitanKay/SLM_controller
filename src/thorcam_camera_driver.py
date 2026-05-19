@@ -121,6 +121,7 @@ class CameraDriver:
 
 # usage
 if __name__ == "__main__":
+    
     camera_driver = CameraDriver(
         exposure_time_ms=20.0,
         dll_path=r"C:\Program Files\Thorlabs\Scientific Imaging\ThorImageCAM\bin",

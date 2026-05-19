@@ -35,6 +35,7 @@ outputs/
 *.hdf5
 *.npy
 *.npz
+*.png
 
 # Generated SLM frames
 outputs/bmp_frames/
@@ -53,3 +54,4 @@ vendor/
 .env
 secrets.*
 config.local.*
+sdk_debug.txt

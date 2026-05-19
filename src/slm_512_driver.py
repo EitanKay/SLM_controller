@@ -182,9 +182,7 @@ class slm_512_driver:
         arr = self._to_uint8_array(pattern)
 
         if arr.ndim == 3:
-            ok = self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 0)
-            if not ok:
-                raise RuntimeError("Write_image failed for RGB data")
+            self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 0)
             return
 
         use_cal = self.calibration_enabled and self.lut_loaded and self.wfc_loaded
@@ -197,14 +195,10 @@ class slm_512_driver:
             )
             if not ok:
                 raise RuntimeError("CalibrateImageArray failed")
-            ok = self.slm.Write_image(out.ctypes.data_as(POINTER(c_ubyte)), 0)
-            if not ok:
-                raise RuntimeError("Write_image failed for calibrated RGB data")
+            self.slm.Write_image(out.ctypes.data_as(POINTER(c_ubyte)), 0)
             return
 
-        ok = self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 1)
-        if not ok:
-            raise RuntimeError("Write_image failed for 8-bit data")
+        self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 1)
 
     def clear_pattern(self):
         if not self.created:
