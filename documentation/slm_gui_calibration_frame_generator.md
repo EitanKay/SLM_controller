@@ -367,6 +367,54 @@ frame16 = generator.make_frame(
 )
 rgb = generator.pack_meadowlark_dvi_16bit_to_rgb(frame16)
 generator.save_bmp_24bit(frame16, "single_frame.bmp")
+
+---
+
+## Importing & Usage (as a Python module)
+
+If you want to use the generator from another script or a Jupyter notebook, import the class directly from the package path. When running from the repository root the import looks like:
+
+```python
+from scripts.calibration.generate_slm_calibration_frames import CalibrationFrameGenerator
+
+gen = CalibrationFrameGenerator()
+# generate arrays in-memory
+frames, metadata = gen.generate_constant_grating_scan_arrays(
+    n_frames=8,
+    scan_stop=50000,
+    grating_low=0,
+    grating_high=40000,
+    stripe_width_px=8,
+)
+
+# write frames to disk and get metadata
+frames, metadata = gen.generate_constant_grating_scan(
+    out_dir="out_frames",
+    n_frames=8,
+    scan_stop=50000,
+    grating_low=0,
+    grating_high=40000,
+    stripe_width_px=8,
+)
+```
+
+Notes on importability:
+- If Python cannot find `scripts`, either run your script from the repository root or add the repo root to `PYTHONPATH` or `sys.path`.
+- Alternatively install the repository in editable mode from the repo root:
+
+```bash
+pip install -e .
+```
+
+Jupyter / notebook tip:
+
+```python
+import sys
+sys.path.append(r"C:/Users/Eitan/Documents/SLM")
+from scripts.calibration.generate_slm_calibration_frames import CalibrationFrameGenerator
+```
+
+This makes it convenient to prototype generation and preview frames interactively before writing to disk.
 ```
 
 ---
