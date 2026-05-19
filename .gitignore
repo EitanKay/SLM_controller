@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Large/generated data
+data/raw/
+data/processed/
+outputs/
+*.avi
+*.mp4
+*.tif
+*.tiff
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# Generated SLM frames
+outputs/bmp_frames/
+generated_frames/
+calibration_frames/
+
+# Meadowlark / vendor SDK files
+vendor/
+*.dll
+*.lib
+*.exe
+*.msi
+*.zip
+
+# Secrets / local config
+.env
+secrets.*
+config.local.*
