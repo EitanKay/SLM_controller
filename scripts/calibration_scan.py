@@ -30,7 +30,7 @@ SPLIT_X = 256
 GRATING_AXIS = "x"
 
 # Paramaters for the scan
-SCAN_STEPS = 256
+SCAN_STEPS = 1024
 
 # Camera parameters
 EXPOSURE_TIME_MS = 0.04
@@ -57,7 +57,7 @@ def capture_calibration_step(mirror_val, generator, slm, camera, out_dir):
     slm.set_pattern(pattern_image)
 
     # Give the SLM liquid crystals a moment to stabilize
-    time.sleep(0.5)
+    time.sleep(0.2)
 
     # Capture and save using raw16 for true intensity data
     img = camera.get_image(output_format="raw16")
@@ -67,7 +67,7 @@ def capture_calibration_step(mirror_val, generator, slm, camera, out_dir):
 
 
 def main():
-    out_dir = project_root / "output"
+    out_dir = project_root / "output" / "calibration_frames"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     generator = CalibrationFrameGenerator()
@@ -78,8 +78,14 @@ def main():
         with slm_512_driver() as slm, CameraDriver(dll_path=DLL_PATH, exposure_time_ms=EXPOSURE_TIME_MS) as camera:
             slm.set_use_calibration(False)
             
+            # Start continuous acquisition before the loop to save time
+            camera.start_acquisition()
+            
             for mirror_val in mirror_values:
                 capture_calibration_step(mirror_val, generator, slm, camera, out_dir)
+            
+            # Stop acquisition once after the loop is done
+            camera.stop_acquisition()
                 
             print("Cleaning up SLM...")
             slm.clear_pattern()
