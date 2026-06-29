@@ -45,6 +45,11 @@ class slm_512_driver:
         self.lut_loaded = False
         self.wfc_loaded = False
         self.calibration_enabled = False
+        
+        # For thread-safe double buffering
+        self._out_buffers = None
+        self._out_buffer_idx = 0
+        self._in_buffer = None
 
     @staticmethod
     def _set_dpi_awareness():
@@ -160,45 +165,81 @@ class slm_512_driver:
         arr = np.asarray(pattern)
         if arr.ndim == 2:
             if arr.dtype != np.uint8:
-                arr = np.clip(arr, 0, 255).astype(np.uint8)
+                # If they pass >8 bit masks purposely and driver requires 8-bit, 
+                # we just use modulo 256 for phase wrapping logic explicitly 
+                # instead of clipping to 255 which destroys the phase wrap.
+                # NOTE: For Meadowlark 16-bit DVI they actually pack into an RGB image.
+                # Here we respect the driver's interface requiring 8-bit inputs
+                # for CalibrateImageArray(..., is_8_bit=True) 
+                arr = np.mod(arr, 256).astype(np.uint8)
             self._validate_dims(arr)
             return np.ascontiguousarray(arr)
 
         if arr.ndim == 3 and arr.shape[2] == 3:
             if arr.dtype != np.uint8:
-                arr = np.clip(arr, 0, 255).astype(np.uint8)
+                 # If treating a >8 bit RGB, apply phase-wrapping mask logic (mod 256)
+                arr = np.mod(arr, 256).astype(np.uint8)
             if self.height is None or self.width is None:
                 raise RuntimeError("SLM dimensions unknown. Call open() first.")
             if arr.shape[:2] != (self.height, self.width):
                 raise ValueError(f"Expected RGB shape {(self.height, self.width, 3)}, got {arr.shape}")
             return np.ascontiguousarray(arr)
 
-        raise ValueError("Pattern must be a uint8 array or PIL Image (L/RGB).")
+        raise ValueError("Pattern must be a >8-bit array, uint8 array or PIL Image (L/RGB).")
 
     def set_pattern(self, pattern):
         if not self.created:
             self.open()
 
         arr = self._to_uint8_array(pattern)
+        
+        # Allocate exactly one stable static memory block for the input array.
+        # This prevents the Python Garbage Collector from freeing the RAM 
+        # while the C++ DVI graphics thread is still reading it asynchronously.
+        if self._in_buffer is None or self._in_buffer.shape != arr.shape:
+            self._in_buffer = np.empty_like(arr, order='C')
+            
+        np.copyto(self._in_buffer, arr)
 
-        if arr.ndim == 3:
-            self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 0)
+        if self._in_buffer.ndim == 3:
+            self.slm.Write_image(self._in_buffer.ctypes.data_as(POINTER(c_ubyte)), 0)
             return
 
         use_cal = self.calibration_enabled and self.lut_loaded and self.wfc_loaded
         if use_cal:
-            out = np.empty((self.height, self.width, 3), dtype=np.uint8)
+            # Use double buffering to prevent graphics driver from reading stale memory.
+            # The DVI driver thread may still be reading the previous frame while we
+            # calibrate the next one. Alternating buffers ensures consistency.
+            if self._out_buffers is None:
+                self._out_buffers = [
+                    np.ascontiguousarray(np.empty((self.height, self.width, 3), dtype=np.uint8)),
+                    np.ascontiguousarray(np.empty((self.height, self.width, 3), dtype=np.uint8)),
+                ]
+                self._out_buffer_idx = 0
+            
+            # Swap to the next buffer
+            self._out_buffer_idx = 1 - self._out_buffer_idx
+            out_buffer = self._out_buffers[self._out_buffer_idx]
+            
             ok = self.slm.CalibrateImageArray(
-                arr.ctypes.data_as(POINTER(c_ubyte)),
-                out.ctypes.data_as(POINTER(c_ubyte)),
+                self._in_buffer.ctypes.data_as(POINTER(c_ubyte)),
+                out_buffer.ctypes.data_as(POINTER(c_ubyte)),
                 True,
             )
             if not ok:
                 raise RuntimeError("CalibrateImageArray failed")
-            self.slm.Write_image(out.ctypes.data_as(POINTER(c_ubyte)), 0)
+            
+            self.slm.Write_image(out_buffer.ctypes.data_as(POINTER(c_ubyte)), 0)
+            # Give the DVI driver time to queue the buffer before returning
+            import time
+            time.sleep(0.001)  # 1ms pause to ensure DLL has grabbed the pointer
             return
-
-        self.slm.Write_image(arr.ctypes.data_as(POINTER(c_ubyte)), 1)
+        
+        # 1 indicates 8-bit grayscale for Write_image
+        self.slm.Write_image(self._in_buffer.ctypes.data_as(POINTER(c_ubyte)), 1)
+        # Give the DVI driver time to queue the buffer before returning
+        import time
+        time.sleep(0.001)  # 1ms pause to ensure DLL has grabbed the pointer
 
     def clear_pattern(self):
         if not self.created:
