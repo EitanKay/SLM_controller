@@ -34,8 +34,8 @@ from src.slm_gui.image_ops import (
     apply_target_transform,
     load_strict_meadowlark_bmp,
     load_target_png,
-    pack_meadowlark_dvi_16bit_to_rgb,
     save_meadowlark_bmp,
+    uint16_to_calibrated_input_uint8,
     uint16_to_preview_uint8,
 )
 from src.slm_gui.workers import GenerationRequest, HologramWorker
@@ -271,9 +271,14 @@ class MainWindow(QMainWindow):
         default_lut.clicked.connect(self.use_default_lut)
         browse_wfc = QPushButton("Browse WFC")
         browse_wfc.clicked.connect(self.browse_wfc)
+        load_wfc = QPushButton("Load WFC")
+        load_wfc.clicked.connect(self.load_selected_wfc)
+        default_wfc = QPushButton("Use Default WFC")
+        default_wfc.clicked.connect(self.use_default_wfc)
 
         self.lut_status_label = QLabel("LUT: default / not loaded")
         self.wfc_status_label = QLabel("WFC: default / not loaded")
+        self.calibration_status_label = QLabel("Calibration: disabled")
 
         form.addWidget(QLabel("LUT"), 0, 0)
         form.addWidget(self.lut_path_edit, 0, 1)
@@ -283,8 +288,11 @@ class MainWindow(QMainWindow):
         form.addWidget(QLabel("WFC"), 1, 0)
         form.addWidget(self.wfc_path_edit, 1, 1)
         form.addWidget(browse_wfc, 1, 2)
+        form.addWidget(load_wfc, 1, 3)
+        form.addWidget(default_wfc, 1, 4)
         form.addWidget(self.lut_status_label, 2, 1, 1, 4)
         form.addWidget(self.wfc_status_label, 3, 1, 1, 4)
+        form.addWidget(self.calibration_status_label, 4, 1, 1, 4)
         form.setColumnStretch(1, 1)
 
         layout.addWidget(box)
@@ -365,18 +373,35 @@ class MainWindow(QMainWindow):
             self._show_error("Default LUT load failed", str(exc))
         self._refresh_status()
 
+    def load_selected_wfc(self) -> None:
+        try:
+            self.backend.load_wfc(self.selected_wfc_path)
+        except Exception as exc:
+            self._show_error("WFC load failed", str(exc))
+        self._refresh_status()
+
+    def use_default_wfc(self) -> None:
+        self.selected_wfc_path = None
+        self.wfc_path_edit.clear()
+        try:
+            if self.backend.status().connected:
+                self.backend.load_wfc(None)
+        except Exception as exc:
+            self._show_error("Default WFC load failed", str(exc))
+        self._refresh_status()
+
     def open_direct_bmp(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Open SLM BMP", "", "BMP files (*.bmp)")
         if not path:
             return
         try:
-            value16, rgb = load_strict_meadowlark_bmp(path)
+            value16, _rgb = load_strict_meadowlark_bmp(path)
         except ImageValidationError as exc:
             self._show_error("Invalid BMP", str(exc))
             return
 
         self.direct_value16 = value16
-        self.direct_rgb = rgb
+        self.direct_rgb = None
         self.direct_rotation_turns = 0
         self.direct_path_label.setText(str(Path(path)))
         self._set_direct_send_ready()
@@ -400,8 +425,8 @@ class MainWindow(QMainWindow):
     def _set_direct_send_ready(self) -> None:
         if self.direct_value16 is None:
             return
-        self.direct_rgb = pack_meadowlark_dvi_16bit_to_rgb(self.direct_value16)
-        self.send_ready = self.direct_rgb
+        self.direct_rgb = None
+        self.send_ready = uint16_to_calibrated_input_uint8(self.direct_value16)
         self.direct_preview.set_gray(uint16_to_preview_uint8(self.direct_value16))
 
     def open_target_png(self) -> None:
@@ -476,7 +501,7 @@ class MainWindow(QMainWindow):
 
     def _generation_finished(self, phase16: object) -> None:
         self.current_phase16 = np.asarray(phase16, dtype=np.uint16)
-        self.send_ready = pack_meadowlark_dvi_16bit_to_rgb(self.current_phase16)
+        self.send_ready = uint16_to_calibrated_input_uint8(self.current_phase16)
         self.phase_preview.set_gray(uint16_to_preview_uint8(self.current_phase16))
         self._set_message("Generated phase mask")
 
@@ -521,6 +546,9 @@ class MainWindow(QMainWindow):
             f"WFC: {'loaded' if status.wfc_loaded else 'not loaded'}"
             f" ({status.wfc_path or 'default'})"
         )
+        self.calibration_status_label.setText(
+            f"Calibration: {'enabled' if status.calibration_enabled else 'disabled'}"
+        )
         self._set_message(status.message or state)
 
     def _set_message(self, text: str) -> None:
@@ -529,4 +557,3 @@ class MainWindow(QMainWindow):
     def _show_error(self, title: str, message: str) -> None:
         self.message_label.setText(f"{title}: {message}")
         QMessageBox.warning(self, title, message)
-

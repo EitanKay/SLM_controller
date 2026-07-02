@@ -17,6 +17,7 @@ class SLMStatus:
     lut_loaded: bool = False
     wfc_path: str | None = None
     wfc_loaded: bool = False
+    calibration_enabled: bool = False
     message: str = ""
 
 
@@ -28,6 +29,8 @@ class SLMBackend(Protocol):
     def disconnect(self) -> None: ...
 
     def load_lut(self, path: str | None) -> None: ...
+
+    def load_wfc(self, path: str | None) -> None: ...
 
     def send(self, pattern: np.ndarray) -> None: ...
 
@@ -45,6 +48,7 @@ class SimulatedSLMBackend:
         self.wfc_path: str | None = None
         self.lut_loaded = False
         self.wfc_loaded = False
+        self.calibration_enabled = False
         self.last_pattern: np.ndarray | None = None
         self.message = "Simulator idle"
 
@@ -54,8 +58,9 @@ class SimulatedSLMBackend:
         self.connected = True
         self.lut_path = str(Path(lut_path)) if lut_path else None
         self.wfc_path = str(Path(wfc_path)) if wfc_path else None
-        self.lut_loaded = bool(lut_path)
-        self.wfc_loaded = bool(wfc_path)
+        self.lut_loaded = True
+        self.wfc_loaded = True
+        self.calibration_enabled = True
         self.message = "Simulator connected"
         return self.status()
 
@@ -65,8 +70,13 @@ class SimulatedSLMBackend:
 
     def load_lut(self, path: str | None) -> None:
         self.lut_path = str(Path(path)) if path else None
-        self.lut_loaded = bool(path)
-        self.message = "Simulator LUT selected" if path else "Simulator using default LUT"
+        self.lut_loaded = True
+        self.message = f"Simulator LUT selected: {self.lut_path or 'default'}"
+
+    def load_wfc(self, path: str | None) -> None:
+        self.wfc_path = str(Path(path)) if path else None
+        self.wfc_loaded = True
+        self.message = f"Simulator WFC selected: {self.wfc_path or 'default'}"
 
     def send(self, pattern: np.ndarray) -> None:
         if not self.connected:
@@ -90,6 +100,7 @@ class SimulatedSLMBackend:
             lut_loaded=self.lut_loaded,
             wfc_path=self.wfc_path,
             wfc_loaded=self.wfc_loaded,
+            calibration_enabled=self.calibration_enabled,
             message=self.message,
         )
 
@@ -114,11 +125,9 @@ class HardwareSLMBackend:
             self.driver = slm_512_driver(sdk_dir=self.sdk_dir)
 
         self.driver.open()
-        if lut_path:
-            self.load_lut(lut_path)
-        if wfc_path:
-            self.driver.load_wfc(wfc_path)
-            self.wfc_path = str(Path(wfc_path))
+        self.load_lut(lut_path)
+        self.load_wfc(wfc_path)
+        self.driver.set_use_calibration(True)
         self.message = "Hardware connected"
         return self.status()
 
@@ -133,6 +142,13 @@ class HardwareSLMBackend:
         self.driver.load_lut(path)
         self.lut_path = str(Path(path)) if path else None
         self.message = f"Loaded LUT: {self.lut_path or 'default'}"
+
+    def load_wfc(self, path: str | None) -> None:
+        if self.driver is None:
+            raise RuntimeError("Connect to hardware before loading a WFC.")
+        self.driver.load_wfc(path)
+        self.wfc_path = str(Path(path)) if path else None
+        self.message = f"Loaded WFC: {self.wfc_path or 'default'}"
 
     def send(self, pattern: np.ndarray) -> None:
         if self.driver is None or not self.driver.created:
@@ -159,6 +175,6 @@ class HardwareSLMBackend:
             lut_loaded=bool(raw["lut_loaded"]),
             wfc_path=self.wfc_path,
             wfc_loaded=bool(raw["wfc_loaded"]),
+            calibration_enabled=bool(raw["calibration_enabled"]),
             message=self.message,
         )
-

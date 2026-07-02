@@ -42,6 +42,13 @@ def uint16_to_preview_uint8(value16_img: np.ndarray) -> np.ndarray:
     return np.uint8(np.round(value16_img.astype(np.float64) * 255 / MAX16))
 
 
+def uint16_to_calibrated_input_uint8(value16_img: np.ndarray) -> np.ndarray:
+    value16_img = np.asarray(value16_img, dtype=np.uint16)
+    return np.ascontiguousarray(
+        np.uint8(np.round(value16_img.astype(np.float64) * 255 / MAX16))
+    )
+
+
 def normalize_to_uint8(arr: np.ndarray) -> np.ndarray:
     arr = np.asarray(arr, dtype=np.float64)
     arr = arr - np.nanmin(arr)
@@ -144,4 +151,3 @@ def rotate_float_image(arr: np.ndarray, angle_degrees: float) -> np.ndarray:
 def save_meadowlark_bmp(value16_img: np.ndarray, path: str | Path) -> None:
     rgb = pack_meadowlark_dvi_16bit_to_rgb(value16_img)
     Image.fromarray(rgb, mode="RGB").save(path, format="BMP")
-
