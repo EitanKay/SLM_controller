@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 
 from PyQt6.QtWidgets import QApplication
@@ -78,10 +79,22 @@ def apply_style(app: QApplication) -> None:
     )
 
 
-def main() -> int:
-    app = QApplication(sys.argv)
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="SLM Control GUI")
+    parser.add_argument(
+        "--sim",
+        action="store_true",
+        help="use the simulator backend instead of hardware",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    qt_argv = [sys.argv[0]] if argv is not None else sys.argv
+    app = QApplication(qt_argv)
     apply_style(app)
-    window = MainWindow()
+    window = MainWindow(backend_mode="sim" if args.sim else "hardware")
     window.resize(1180, 780)
     window.show()
     return app.exec()
@@ -89,4 +102,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

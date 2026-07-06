@@ -1,0 +1,8 @@
+numpy
+Pillow
+scipy
+matplotlib
+PyQt6
+slmsuite
+pylablib
+tqdm

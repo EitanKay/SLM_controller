@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
-from PyQt6.QtCore import QThread, QTimer, Qt
+from PyQt6.QtCore import QSettings, QThread, QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -40,6 +41,12 @@ from src.slm_gui.image_ops import (
 )
 from src.slm_gui.workers import GenerationRequest, HologramWorker
 
+SETTINGS_ORG = "SLM"
+SETTINGS_APP = "SLMControl"
+LUT_SETTING_KEY = "calibration/lut_path"
+WFC_SETTING_KEY = "calibration/wfc_path"
+GS_ALGORITHMS = ["GS", "WGS-Leonardo", "WGS-Kim", "WGS-Nogrette", "WGS-Wu", "WGS-tanh"]
+
 
 def qpixmap_from_gray(arr: np.ndarray, max_side: int = 360) -> QPixmap:
     arr = np.ascontiguousarray(arr, dtype=np.uint8)
@@ -71,13 +78,22 @@ class ImagePreview(QLabel):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(
+        self,
+        backend_mode: Literal["hardware", "sim"] = "hardware",
+        settings: QSettings | None = None,
+        auto_connect: bool = True,
+    ):
         super().__init__()
         self.setWindowTitle("SLM Control")
 
-        self.backend: SLMBackend = SimulatedSLMBackend()
-        self.selected_lut_path: str | None = None
-        self.selected_wfc_path: str | None = None
+        self.settings = settings or QSettings(SETTINGS_ORG, SETTINGS_APP)
+        self.backend_mode = backend_mode
+        self.backend: SLMBackend = (
+            SimulatedSLMBackend() if backend_mode == "sim" else HardwareSLMBackend()
+        )
+        self.selected_lut_path = self._settings_path(LUT_SETTING_KEY)
+        self.selected_wfc_path = self._settings_path(WFC_SETTING_KEY)
 
         self.direct_value16: np.ndarray | None = None
         self.direct_rgb: np.ndarray | None = None
@@ -105,7 +121,10 @@ class MainWindow(QMainWindow):
         self.message_label = QLabel("Ready")
         layout.addWidget(self.message_label)
         self.setCentralWidget(root)
+        self._sync_calibration_path_fields()
         self._refresh_status()
+        if auto_connect:
+            self._auto_connect_backend()
 
     def _build_top_bar(self) -> QFrame:
         frame = QFrame()
@@ -113,29 +132,17 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(12, 10, 12, 10)
 
-        self.backend_combo = QComboBox()
-        self.backend_combo.addItems(["Simulator", "Hardware"])
-        self.backend_combo.currentTextChanged.connect(self._select_backend)
-
         self.status_pill = QLabel("Disconnected")
         self.status_pill.setObjectName("StatusPill")
 
-        connect_button = QPushButton("Connect")
-        connect_button.clicked.connect(self.connect_backend)
-        disconnect_button = QPushButton("Disconnect")
-        disconnect_button.clicked.connect(self.disconnect_backend)
         clear_button = QPushButton("Clear")
         clear_button.clicked.connect(self.clear_slm)
         send_button = QPushButton("Send to SLM")
         send_button.setObjectName("PrimaryButton")
         send_button.clicked.connect(self.send_to_slm)
 
-        layout.addWidget(QLabel("Backend"))
-        layout.addWidget(self.backend_combo)
         layout.addWidget(self.status_pill)
         layout.addStretch(1)
-        layout.addWidget(connect_button)
-        layout.addWidget(disconnect_button)
         layout.addWidget(clear_button)
         layout.addWidget(send_button)
         return frame
@@ -186,7 +193,8 @@ class MainWindow(QMainWindow):
         upload_button = QPushButton("Open PNG")
         upload_button.clicked.connect(self.open_target_png)
         self.algorithm_combo = QComboBox()
-        self.algorithm_combo.addItems(["WGS", "GS"])
+        self.algorithm_combo.addItems(GS_ALGORITHMS)
+        self.algorithm_combo.setCurrentText("WGS-Kim")
         self.iterations_spin = QSpinBox()
         self.iterations_spin.setRange(1, 500)
         self.iterations_spin.setValue(30)
@@ -265,14 +273,10 @@ class MainWindow(QMainWindow):
 
         browse_lut = QPushButton("Browse LUT")
         browse_lut.clicked.connect(self.browse_lut)
-        load_lut = QPushButton("Load LUT")
-        load_lut.clicked.connect(self.load_selected_lut)
         default_lut = QPushButton("Use Default LUT")
         default_lut.clicked.connect(self.use_default_lut)
         browse_wfc = QPushButton("Browse WFC")
         browse_wfc.clicked.connect(self.browse_wfc)
-        load_wfc = QPushButton("Load WFC")
-        load_wfc.clicked.connect(self.load_selected_wfc)
         default_wfc = QPushButton("Use Default WFC")
         default_wfc.clicked.connect(self.use_default_wfc)
 
@@ -283,35 +287,72 @@ class MainWindow(QMainWindow):
         form.addWidget(QLabel("LUT"), 0, 0)
         form.addWidget(self.lut_path_edit, 0, 1)
         form.addWidget(browse_lut, 0, 2)
-        form.addWidget(load_lut, 0, 3)
-        form.addWidget(default_lut, 0, 4)
+        form.addWidget(default_lut, 0, 3)
         form.addWidget(QLabel("WFC"), 1, 0)
         form.addWidget(self.wfc_path_edit, 1, 1)
         form.addWidget(browse_wfc, 1, 2)
-        form.addWidget(load_wfc, 1, 3)
-        form.addWidget(default_wfc, 1, 4)
-        form.addWidget(self.lut_status_label, 2, 1, 1, 4)
-        form.addWidget(self.wfc_status_label, 3, 1, 1, 4)
-        form.addWidget(self.calibration_status_label, 4, 1, 1, 4)
+        form.addWidget(default_wfc, 1, 3)
+        form.addWidget(self.lut_status_label, 2, 1, 1, 3)
+        form.addWidget(self.wfc_status_label, 3, 1, 1, 3)
+        form.addWidget(self.calibration_status_label, 4, 1, 1, 3)
         form.setColumnStretch(1, 1)
 
         layout.addWidget(box)
         layout.addStretch(1)
         return widget
 
-    def _select_backend(self, name: str) -> None:
-        try:
-            self.backend.disconnect()
-        except Exception:
-            pass
-        self.backend = HardwareSLMBackend() if name == "Hardware" else SimulatedSLMBackend()
-        self._refresh_status()
+    def _settings_path(self, key: str) -> str | None:
+        value = self.settings.value(key, "", str)
+        return value or None
 
-    def connect_backend(self) -> None:
+    def _save_settings_path(self, key: str, path: str | None) -> None:
+        if path:
+            self.settings.setValue(key, path)
+        else:
+            self.settings.remove(key)
+        self.settings.sync()
+
+    def _sync_calibration_path_fields(self) -> None:
+        self.lut_path_edit.setText(self.selected_lut_path or "")
+        self.wfc_path_edit.setText(self.selected_wfc_path or "")
+
+    def _auto_connect_backend(self) -> None:
+        if self.backend_mode == "sim":
+            self.connect_backend(show_errors=True)
+            return
+
+        while True:
+            try:
+                self.backend.connect(self.selected_lut_path, self.selected_wfc_path)
+            except Exception as exc:
+                self._refresh_status()
+                self.message_label.setText(f"Hardware not connected: {exc}")
+                choice = QMessageBox.warning(
+                    self,
+                    "Connection failed",
+                    f"Could not connect to the SLM hardware.\n\n{exc}\n\n"
+                    "Connect the device and press Retry.",
+                    QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Retry,
+                )
+                if choice == QMessageBox.StandardButton.Retry:
+                    continue
+                self.message_label.setText(
+                    "Hardware not connected. Connect the device and restart or "
+                    "retry by reopening the app."
+                )
+                return
+            self._refresh_status()
+            return
+
+    def connect_backend(self, show_errors: bool = True) -> None:
         try:
             self.backend.connect(self.selected_lut_path, self.selected_wfc_path)
         except Exception as exc:
-            self._show_error("Connection failed", str(exc))
+            if show_errors:
+                self._show_error("Connection failed", str(exc))
+            else:
+                self._set_message(f"Connection failed: {exc}")
         self._refresh_status()
 
     def disconnect_backend(self) -> None:
@@ -343,8 +384,9 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self.selected_lut_path = path
+        self._save_settings_path(LUT_SETTING_KEY, path)
         self.lut_path_edit.setText(path)
-        self._refresh_status()
+        self.load_selected_lut()
 
     def browse_wfc(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -353,10 +395,15 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self.selected_wfc_path = path
+        self._save_settings_path(WFC_SETTING_KEY, path)
         self.wfc_path_edit.setText(path)
-        self._refresh_status()
+        self.load_selected_wfc()
 
     def load_selected_lut(self) -> None:
+        if not self.backend.status().connected:
+            self._refresh_status()
+            self._set_message("LUT selected; it will load on the next connection.")
+            return
         try:
             self.backend.load_lut(self.selected_lut_path)
         except Exception as exc:
@@ -365,15 +412,25 @@ class MainWindow(QMainWindow):
 
     def use_default_lut(self) -> None:
         self.selected_lut_path = None
+        self._save_settings_path(LUT_SETTING_KEY, None)
         self.lut_path_edit.clear()
+        pending_message = False
         try:
             if self.backend.status().connected:
                 self.backend.load_lut(None)
+            else:
+                pending_message = True
         except Exception as exc:
             self._show_error("Default LUT load failed", str(exc))
         self._refresh_status()
+        if pending_message:
+            self._set_message("Default LUT selected; it will load on the next connection.")
 
     def load_selected_wfc(self) -> None:
+        if not self.backend.status().connected:
+            self._refresh_status()
+            self._set_message("WFC selected; it will load on the next connection.")
+            return
         try:
             self.backend.load_wfc(self.selected_wfc_path)
         except Exception as exc:
@@ -382,13 +439,19 @@ class MainWindow(QMainWindow):
 
     def use_default_wfc(self) -> None:
         self.selected_wfc_path = None
+        self._save_settings_path(WFC_SETTING_KEY, None)
         self.wfc_path_edit.clear()
+        pending_message = False
         try:
             if self.backend.status().connected:
                 self.backend.load_wfc(None)
+            else:
+                pending_message = True
         except Exception as exc:
             self._show_error("Default WFC load failed", str(exc))
         self._refresh_status()
+        if pending_message:
+            self._set_message("Default WFC selected; it will load on the next connection.")
 
     def open_direct_bmp(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Open SLM BMP", "", "BMP files (*.bmp)")

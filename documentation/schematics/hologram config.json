@@ -1,0 +1,450 @@
+{
+  "schema": "schematics-builder.schematic",
+  "version": 1,
+  "metadata": {
+    "filename": "Untitled Schematic",
+    "exportedAt": "2026-06-29T17:38:43.624Z"
+  },
+  "canvas": {
+    "viewBox": {
+      "x": 216.86169930249645,
+      "y": -210.9968873004721,
+      "width": 559.8032842622653,
+      "height": 351.87662080856325
+    }
+  },
+  "snapshot": {
+    "idCounter": 13,
+    "compositeInstanceCounter": 0,
+    "currentId": null,
+    "selectedIds": [],
+    "nextPosition": {
+      "x": 254.0461068821136,
+      "y": -161.30302149885034
+    },
+    "components": [
+      {
+        "mapId": 3,
+        "componentId": "point-1782754179252-uci1dnrtj",
+        "type": "point",
+        "name": "point",
+        "x": 268,
+        "y": -1,
+        "rotation": 0,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 150,
+          "y": 0
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": null,
+        "children": [
+          4
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          12
+        ],
+        "rayShape": "convergent",
+        "rayPolygonColor": "#0095ff",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 18,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 0,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 4,
+        "componentId": "lens-1782754182695-tp3ysiiul",
+        "type": "lens",
+        "name": "lens",
+        "x": 326,
+        "y": -2,
+        "rotation": 0,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 150,
+          "y": 0
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 3,
+        "children": [
+          6
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          6,
+          7,
+          8,
+          9,
+          10,
+          12
+        ],
+        "rayShape": "divergent",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": false,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 4,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 3.94,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 6,
+        "componentId": "lens-1782754194024-kh98icofu",
+        "type": "lens",
+        "name": "lens",
+        "x": 400,
+        "y": -1,
+        "rotation": 0,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": true,
+        "arrowVector": {
+          "x": 150,
+          "y": 0
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 4,
+        "children": [
+          7
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          7,
+          8,
+          9,
+          10,
+          12
+        ],
+        "rayShape": "collimated",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 4,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 0,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 7,
+        "componentId": "plane-1782754196040-337ceir6a",
+        "type": "plane",
+        "name": "plane",
+        "x": 450,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "visible": false,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 150,
+          "y": 0
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 6,
+        "children": [
+          8
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          6,
+          8,
+          9,
+          10,
+          12
+        ],
+        "rayShape": "convergent",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 10,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 4.56,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 8,
+        "componentId": "lens-1782754196807-k0n2pima5",
+        "type": "lens",
+        "name": "lens",
+        "x": 551,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 150,
+          "y": 0
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 7,
+        "children": [
+          9
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          6,
+          7,
+          9,
+          10,
+          12
+        ],
+        "rayShape": "divergent",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 8.06,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 4.56,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 9,
+        "componentId": "slm-1782754201018-ph09lustb",
+        "type": "slm",
+        "name": "slm",
+        "x": 702,
+        "y": 1,
+        "rotation": 10,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 147.7211629518312,
+          "y": 26.04722665003959
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 8,
+        "children": [
+          10
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          6,
+          7,
+          8,
+          10,
+          12
+        ],
+        "rayShape": "collimated",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 8.174792554785176,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 0,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 10,
+        "componentId": "lens-1782754210422-jd3os6jug",
+        "type": "lens",
+        "name": "lens",
+        "x": 530,
+        "y": -62,
+        "rotation": 20,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": 140.95389311788603,
+          "y": 51.30302149885039
+        },
+        "upVector": {
+          "x": 0,
+          "y": -1
+        },
+        "parent": 9,
+        "children": [
+          12
+        ],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          12
+        ],
+        "rayShape": "collimated",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 8.047707146085223,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 0,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      },
+      {
+        "mapId": 12,
+        "componentId": "detector-1782754643990-ribcaqqwg",
+        "type": "detector",
+        "name": "detector",
+        "x": 395,
+        "y": -110,
+        "rotation": 200,
+        "scale": 1,
+        "visible": true,
+        "flipX": false,
+        "flipY": false,
+        "arrowVector": {
+          "x": -140.9538931178864,
+          "y": -51.30302149885035
+        },
+        "upVector": {
+          "x": 0,
+          "y": 1
+        },
+        "parent": 10,
+        "children": [],
+        "isGrouped": true,
+        "groupMembers": [
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "rayShape": "convergent",
+        "rayPolygonColor": "hsl(0, 70%, 50%)",
+        "rayPolygonOpacity": 0.2,
+        "rayColorInheritFromParent": true,
+        "rayGradientEnabled": false,
+        "rayPolygonColor2": "#0095ff",
+        "apertureRadius": 8.047707146085223,
+        "apertureCenterOffset": 0,
+        "arraySegments": 3,
+        "arraySizeRatio": 1,
+        "arrayPositionRatio": 1,
+        "coneAngle": 3.21,
+        "isCompositeInstance": false,
+        "compositeKey": null,
+        "compositeInstanceId": null,
+        "isExitPort": false,
+        "isEntryPort": false,
+        "rayLocked": false
+      }
+    ]
+  }
+}

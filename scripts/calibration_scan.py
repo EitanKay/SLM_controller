@@ -30,7 +30,7 @@ SPLIT_X = 256
 GRATING_AXIS = "x"
 
 # Paramaters for the scan
-SCAN_STEPS = 1024
+SCAN_STEPS = 16
 
 # Camera parameters
 EXPOSURE_TIME_MS = 0.04
@@ -76,12 +76,14 @@ def main():
     try:
         # Utilize chained context managers for flat, automatic cleanup
         with slm_512_driver() as slm, CameraDriver(dll_path=DLL_PATH, exposure_time_ms=EXPOSURE_TIME_MS) as camera:
+            
             slm.set_use_calibration(False)
             
             # Start continuous acquisition before the loop to save time
             camera.start_acquisition()
             
             for mirror_val in mirror_values:
+                print(f"Processing mirror value: {mirror_val}")
                 capture_calibration_step(mirror_val, generator, slm, camera, out_dir)
             
             # Stop acquisition once after the loop is done

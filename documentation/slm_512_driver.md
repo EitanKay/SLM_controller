@@ -21,13 +21,46 @@ Default behavior is **raw write** unless both LUT and WFC are loaded and calibra
 ## Requirements
 
 - Meadowlark Blink DVI SDK installed
-- 64-bit Python if the SDK DLLs are 64-bit
+- 64-bit Python 3.12 for the standard lab setup
 - Python packages: `numpy`, `Pillow`
 
 Default SDK directory (used unless overridden):
 
 ```
 C:\Program Files\Meadowlark Optics\Blink DVI\SDK
+```
+
+The SDK installer is legacy vendor software. It should come from Meadowlark
+customer support or lab-managed storage. Do not commit the installer, SDK DLLs,
+or vendor archives to this repository unless Meadowlark explicitly grants
+redistribution permission.
+
+After installation, verify this file exists:
+
+```text
+C:\Program Files\Meadowlark Optics\Blink DVI\SDK\Blink_C_wrapper.dll
+```
+
+The SDK folder should contain these runtime files:
+
+```text
+Blink_C_wrapper.dll
+HdmiDisplay.dll
+ImageGen.dll
+freeglut.dll
+glew64.dll
+```
+
+To check a new machine, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_hardware_setup.py
+```
+
+Simulator mode does not require the Meadowlark SDK:
+
+```powershell
+.\scripts\run_gui_sim.ps1
 ```
 
 ---
@@ -140,3 +173,4 @@ with slm_512_driver() as slm:
 - `clear_pattern()` sends a zero-valued 8-bit image.
 - If the SDK directory is missing, `open()` raises `FileNotFoundError`.
 - If LUT/WFC loading fails, the driver raises `RuntimeError`.
+- Keep Meadowlark installers and SDK binaries out of git unless redistribution is explicitly allowed.

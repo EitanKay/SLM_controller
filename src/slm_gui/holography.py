@@ -38,19 +38,45 @@ def gerchberg_saxton(
     return np.mod(np.angle(field_slm), 2 * np.pi)
 
 
+SLMSUITE_WGS_METHODS = {
+    "WGS-LEONARDO": "WGS-Leonardo",
+    "WGS-KIM": "WGS-Kim",
+    "WGS-NOGRETTE": "WGS-Nogrette",
+    "WGS-WU": "WGS-Wu",
+    "WGS-TANH": "WGS-tanh",
+}
+
+
+class SlmsuiteUnavailableError(RuntimeError):
+    pass
+
+
 def weighted_gerchberg_saxton(
     target: np.ndarray, iterations: int = 30, seed: int = 0
 ) -> np.ndarray:
     try:
-        from slmsuite.holography.algorithms import Hologram
-    except Exception:
+        return weighted_gerchberg_saxton_slmsuite(
+            target, iterations=iterations, method="WGS-Kim"
+        )
+    except SlmsuiteUnavailableError:
         return weighted_gerchberg_saxton_numpy(target, iterations=iterations, seed=seed)
+
+
+def weighted_gerchberg_saxton_slmsuite(
+    target: np.ndarray, iterations: int = 30, method: str = "WGS-Kim"
+) -> np.ndarray:
+    try:
+        from slmsuite.holography.algorithms import Hologram
+    except ImportError as exc:
+        raise SlmsuiteUnavailableError(
+            f"{method} requires slmsuite. Install slmsuite or choose GS."
+        ) from exc
 
     target_amp = target_uint8_to_amplitude(target)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         hologram = Hologram(target=target_amp, slm_shape=SLM_SHAPE)
-        hologram.optimize(method="WGS-Kim", maxiter=int(iterations))
+        hologram.optimize(method=method, maxiter=int(iterations))
         phase = hologram.get_phase()
     return np.mod(np.asarray(phase, dtype=np.float64), 2 * np.pi)
 
@@ -93,8 +119,18 @@ def generate_phase_uint16(
     algorithm = algorithm.upper()
     if algorithm == "GS":
         phase = gerchberg_saxton(target, iterations=iterations, seed=seed)
-    elif algorithm == "WGS":
-        phase = weighted_gerchberg_saxton(target, iterations=iterations, seed=seed)
+    elif algorithm in SLMSUITE_WGS_METHODS:
+        method = SLMSUITE_WGS_METHODS[algorithm]
+        try:
+            phase = weighted_gerchberg_saxton_slmsuite(
+                target, iterations=iterations, method=method
+            )
+        except SlmsuiteUnavailableError:
+            if method != "WGS-Kim":
+                raise
+            phase = weighted_gerchberg_saxton_numpy(
+                target, iterations=iterations, seed=seed
+            )
     else:
         raise ValueError(f"Unsupported holography algorithm: {algorithm}")
     return phase_radians_to_uint16(phase)
