@@ -20,8 +20,10 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QDoubleSpinBox,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -34,8 +36,10 @@ from src.slm_gui.image_ops import (
     apply_discrete_transform,
     apply_target_transform,
     load_strict_meadowlark_bmp,
+    load_target_image,
     load_target_png,
     save_meadowlark_bmp,
+    apply_phase_offset_wraps,
     uint16_to_calibrated_input_uint8,
     uint16_to_preview_uint8,
 )
@@ -101,8 +105,12 @@ class MainWindow(QMainWindow):
 
         self.original_target: np.ndarray | None = None
         self.current_target: np.ndarray | None = None
+        self.file_target: np.ndarray | None = None
+        self.base_phase16: np.ndarray | None = None
+        self.final_phase16: np.ndarray | None = None
         self.current_phase16: np.ndarray | None = None
         self.send_ready: np.ndarray | None = None
+        self.pending_regeneration = False
 
         self.worker_thread: QThread | None = None
         self.worker: HologramWorker | None = None
@@ -122,6 +130,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.message_label)
         self.setCentralWidget(root)
         self._sync_calibration_path_fields()
+        self._set_target_from_hg(schedule_generation=False)
         self._refresh_status()
         if auto_connect:
             self._auto_connect_backend()
@@ -149,8 +158,8 @@ class MainWindow(QMainWindow):
 
     def _build_tabs(self) -> QTabWidget:
         tabs = QTabWidget()
-        tabs.addTab(self._build_direct_tab(), "Direct Control")
         tabs.addTab(self._build_generation_tab(), "Mask Generation")
+        tabs.addTab(self._build_direct_tab(), "Direct Control")
         tabs.addTab(self._build_hardware_tab(), "Hardware Settings")
         return tabs
 
@@ -187,11 +196,9 @@ class MainWindow(QMainWindow):
     def _build_generation_tab(self) -> QWidget:
         widget = QWidget()
         layout = QGridLayout(widget)
-        controls = QGroupBox("Target and Algorithm")
-        form = QFormLayout(controls)
 
-        upload_button = QPushButton("Open PNG")
-        upload_button.clicked.connect(self.open_target_png)
+        algorithm_box = QGroupBox("Algorithm")
+        algorithm_form = QFormLayout(algorithm_box)
         self.algorithm_combo = QComboBox()
         self.algorithm_combo.addItems(GS_ALGORITHMS)
         self.algorithm_combo.setCurrentText("WGS-Kim")
@@ -201,31 +208,24 @@ class MainWindow(QMainWindow):
         self.seed_spin = QSpinBox()
         self.seed_spin.setRange(0, 999999)
         self.seed_spin.setValue(0)
+        apply_algorithm = QPushButton("Apply")
+        apply_algorithm.clicked.connect(self.generate_mask)
 
-        self.invert_check = QCheckBox()
-        self.flip_x_check = QCheckBox()
-        self.flip_y_check = QCheckBox()
-        for check in (self.invert_check, self.flip_x_check, self.flip_y_check):
-            check.stateChanged.connect(self._target_controls_changed)
+        algorithm_form.addRow("Algorithm", self.algorithm_combo)
+        algorithm_form.addRow("Iterations", self.iterations_spin)
+        algorithm_form.addRow("Seed", self.seed_spin)
+        algorithm_form.addRow(apply_algorithm)
 
-        generate_button = QPushButton("Generate Mask")
-        generate_button.setObjectName("PrimaryButton")
-        generate_button.clicked.connect(self.generate_mask)
-        save_button = QPushButton("Save BMP")
-        save_button.clicked.connect(self.save_generated_bmp)
+        target_box = QGroupBox("Target")
+        target_layout = QVBoxLayout(target_box)
+        self.target_source_combo = QComboBox()
+        self.target_source_combo.addItems(["TEM/HG", "from file"])
+        self.target_source_combo.currentIndexChanged.connect(self._target_source_changed)
+        target_layout.addWidget(self.target_source_combo)
 
-        form.addRow(upload_button)
-        form.addRow("Algorithm", self.algorithm_combo)
-        form.addRow("Iterations", self.iterations_spin)
-        form.addRow("Seed", self.seed_spin)
-        form.addRow("Invert target", self.invert_check)
-        form.addRow("Flip horizontal", self.flip_x_check)
-        form.addRow("Flip vertical", self.flip_y_check)
-        form.addRow(generate_button)
-        form.addRow(save_button)
-
-        hg_box = QGroupBox("TEM / HG Target")
-        hg_form = QFormLayout(hg_box)
+        self.target_stack = QStackedWidget()
+        hg_widget = QWidget()
+        hg_form = QFormLayout(hg_widget)
         self.hg_n_spin = QSpinBox()
         self.hg_n_spin.setRange(0, 20)
         self.hg_m_spin = QSpinBox()
@@ -240,22 +240,92 @@ class MainWindow(QMainWindow):
         self.hg_rotation_spin.setRange(-180.0, 180.0)
         self.hg_rotation_spin.setDecimals(1)
         self.hg_rotation_spin.setSingleStep(1.0)
-        hg_button = QPushButton("Use TEM Target")
-        hg_button.clicked.connect(self.use_hg_target)
         hg_form.addRow("n", self.hg_n_spin)
         hg_form.addRow("m", self.hg_m_spin)
         hg_form.addRow("Waist", self.hg_waist_spin)
         hg_form.addRow("Normalize", self.hg_norm_combo)
         hg_form.addRow("Rotation", self.hg_rotation_spin)
-        hg_form.addRow(hg_button)
+
+        file_widget = QWidget()
+        file_layout = QVBoxLayout(file_widget)
+        upload_button = QPushButton("Load Image")
+        upload_button.clicked.connect(self.open_target_image)
+        self.file_target_label = QLabel("No image loaded")
+        self.file_target_label.setWordWrap(True)
+        file_layout.addWidget(upload_button)
+        file_layout.addWidget(self.file_target_label)
+        file_layout.addStretch(1)
+
+        self.target_stack.addWidget(hg_widget)
+        self.target_stack.addWidget(file_widget)
+        target_layout.addWidget(self.target_stack)
+
+        for widget_to_watch in (
+            self.hg_n_spin,
+            self.hg_m_spin,
+            self.hg_waist_spin,
+            self.hg_norm_combo,
+            self.hg_rotation_spin,
+        ):
+            if isinstance(widget_to_watch, QComboBox):
+                widget_to_watch.currentIndexChanged.connect(self._hg_controls_changed)
+            else:
+                widget_to_watch.valueChanged.connect(self._hg_controls_changed)
+
+        control_box = QGroupBox("Control")
+        control_form = QFormLayout(control_box)
+        self.invert_check = QCheckBox()
+        self.flip_x_check = QCheckBox()
+        self.flip_y_check = QCheckBox()
+        for check in (self.invert_check, self.flip_x_check, self.flip_y_check):
+            check.stateChanged.connect(self._target_controls_changed)
+        self.offset_x_spin = QDoubleSpinBox()
+        self.offset_x_spin.setRange(-100.0, 100.0)
+        self.offset_x_spin.setDecimals(3)
+        self.offset_x_spin.setSingleStep(0.1)
+        self.offset_y_spin = QDoubleSpinBox()
+        self.offset_y_spin.setRange(-100.0, 100.0)
+        self.offset_y_spin.setDecimals(3)
+        self.offset_y_spin.setSingleStep(0.1)
+        self.offset_x_spin.valueChanged.connect(self._offset_controls_changed)
+        self.offset_y_spin.valueChanged.connect(self._offset_controls_changed)
+
+        generate_button = QPushButton("Generate Mask")
+        generate_button.setObjectName("PrimaryButton")
+        generate_button.clicked.connect(self.generate_mask)
+        save_button = QPushButton("Save BMP")
+        save_button.clicked.connect(self.save_generated_bmp)
+
+        control_form.addRow("Invert target", self.invert_check)
+        control_form.addRow("Flip horizontal", self.flip_x_check)
+        control_form.addRow("Flip vertical", self.flip_y_check)
+        control_form.addRow("Offset x (2pi wraps)", self.offset_x_spin)
+        control_form.addRow("Offset y (2pi wraps)", self.offset_y_spin)
+        control_form.addRow(generate_button)
+        control_form.addRow(save_button)
 
         self.target_preview = ImagePreview("Target preview")
         self.phase_preview = ImagePreview("Generated phase mask")
 
-        layout.addWidget(controls, 0, 0)
-        layout.addWidget(hg_box, 1, 0)
-        layout.addWidget(self.target_preview, 0, 1, 2, 1)
-        layout.addWidget(self.phase_preview, 0, 2, 2, 1)
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(algorithm_box)
+        left_layout.addWidget(target_box)
+        left_layout.addWidget(control_box)
+        left_layout.addStretch(1)
+
+        controls_scroll = QScrollArea()
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        controls_scroll.setWidget(left)
+        controls_scroll.setMinimumWidth(360)
+
+        layout.addWidget(controls_scroll, 0, 0)
+        layout.addWidget(self.target_preview, 0, 1)
+        layout.addWidget(self.phase_preview, 0, 2)
+        layout.setColumnMinimumWidth(0, 360)
         layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 1)
         return widget
@@ -504,23 +574,54 @@ class MainWindow(QMainWindow):
         self._update_target_from_controls()
         self._set_message("Loaded target PNG")
 
+    def open_target_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open target image", "", "Image files (*.*)"
+        )
+        if not path:
+            return
+        try:
+            self.file_target = load_target_image(path)
+        except ImageValidationError as exc:
+            self._show_error("Invalid target image", str(exc))
+            return
+        self.file_target_label.setText(str(Path(path)))
+        if self.target_source_combo.currentText() == "from file":
+            self._set_target_from_file(schedule_generation=True)
+        else:
+            self.target_source_combo.setCurrentText("from file")
+        self._set_message("Loaded target image")
+
+    def _target_source_changed(self) -> None:
+        self.target_stack.setCurrentIndex(self.target_source_combo.currentIndex())
+        if self.target_source_combo.currentText() == "TEM/HG":
+            self._set_target_from_hg(schedule_generation=True)
+            return
+        self._set_target_from_file(schedule_generation=True)
+
     def _target_controls_changed(self) -> None:
         self._update_target_from_controls()
         if self.current_target is not None:
-            self.regen_timer.start()
+            self._clear_generated_phase()
+            self._schedule_generation()
 
-    def _update_target_from_controls(self) -> None:
-        if self.original_target is None:
+    def _offset_controls_changed(self) -> None:
+        if self.worker_thread is not None:
+            self.pending_regeneration = True
+            self._set_message("Generation running; queued latest settings")
             return
-        self.current_target = apply_target_transform(
-            self.original_target,
-            invert=self.invert_check.isChecked(),
-            flip_x=self.flip_x_check.isChecked(),
-            flip_y=self.flip_y_check.isChecked(),
-        )
-        self.target_preview.set_gray(self.current_target)
+        if self.base_phase16 is not None:
+            self._apply_final_phase(auto_send=True)
+            return
+        if self.current_target is not None:
+            self._schedule_generation()
 
-    def use_hg_target(self) -> None:
+    def _hg_controls_changed(self) -> None:
+        if self.target_source_combo.currentText() != "TEM/HG":
+            return
+        self._set_target_from_hg(schedule_generation=True)
+
+    def _set_target_from_hg(self, schedule_generation: bool) -> None:
         try:
             target = generate_hg_target_uint8(
                 self.hg_n_spin.value(),
@@ -534,14 +635,59 @@ class MainWindow(QMainWindow):
             return
         self.original_target = target
         self._update_target_from_controls()
+        self._clear_generated_phase()
+        if schedule_generation:
+            self._schedule_generation()
+
+    def _set_target_from_file(self, schedule_generation: bool) -> None:
+        if self.file_target is None:
+            self.original_target = None
+            self.current_target = None
+            self.target_preview.reset_text("Target preview")
+            self._clear_generated_phase()
+            self._set_message("Load an image target")
+            return
+        self.original_target = self.file_target
+        self._update_target_from_controls()
+        self._clear_generated_phase()
+        if schedule_generation:
+            self._schedule_generation()
+
+    def _schedule_generation(self) -> None:
+        if self.worker_thread is not None:
+            self.pending_regeneration = True
+            self._set_message("Generation running; queued latest settings")
+            return
         self.regen_timer.start()
+
+    def _clear_generated_phase(self) -> None:
+        self.base_phase16 = None
+        self.final_phase16 = None
+        self.current_phase16 = None
+        self.send_ready = None
+        self.phase_preview.reset_text("Generated phase mask")
+
+    def _update_target_from_controls(self) -> None:
+        if self.original_target is None:
+            return
+        self.current_target = apply_target_transform(
+            self.original_target,
+            invert=self.invert_check.isChecked(),
+            flip_x=self.flip_x_check.isChecked(),
+            flip_y=self.flip_y_check.isChecked(),
+        )
+        self.target_preview.set_gray(self.current_target)
+
+    def use_hg_target(self) -> None:
+        self._set_target_from_hg(schedule_generation=True)
 
     def generate_mask(self) -> None:
         if self.current_target is None:
-            self._show_error("No target", "Open a PNG or generate a TEM target first.")
+            self._show_error("No target", "Choose TEM/HG or load an image target first.")
             return
         if self.worker_thread is not None:
-            self._set_message("Generation already running")
+            self.pending_regeneration = True
+            self._set_message("Generation running; queued latest settings")
             return
 
         request = GenerationRequest(
@@ -563,10 +709,32 @@ class MainWindow(QMainWindow):
         self._set_message("Generating phase mask...")
 
     def _generation_finished(self, phase16: object) -> None:
-        self.current_phase16 = np.asarray(phase16, dtype=np.uint16)
-        self.send_ready = uint16_to_calibrated_input_uint8(self.current_phase16)
-        self.phase_preview.set_gray(uint16_to_preview_uint8(self.current_phase16))
+        self.base_phase16 = np.asarray(phase16, dtype=np.uint16)
+        self._apply_final_phase(auto_send=not self.pending_regeneration)
         self._set_message("Generated phase mask")
+
+    def _apply_final_phase(self, auto_send: bool) -> None:
+        if self.base_phase16 is None:
+            return
+        self.final_phase16 = apply_phase_offset_wraps(
+            self.base_phase16,
+            offset_x_wraps=self.offset_x_spin.value(),
+            offset_y_wraps=self.offset_y_spin.value(),
+        )
+        self.current_phase16 = self.final_phase16
+        self.send_ready = uint16_to_calibrated_input_uint8(self.final_phase16)
+        self.phase_preview.set_gray(uint16_to_preview_uint8(self.final_phase16))
+        if auto_send:
+            self._auto_send_generated_mask()
+
+    def _auto_send_generated_mask(self) -> None:
+        if self.send_ready is None or not self.backend.status().connected:
+            return
+        try:
+            self.backend.send(self.send_ready)
+        except Exception as exc:
+            self._show_error("Auto-send failed", str(exc))
+        self._refresh_status()
 
     def _generation_failed(self, message: str) -> None:
         self._show_error("Generation failed", message)
@@ -578,9 +746,12 @@ class MainWindow(QMainWindow):
             self.worker_thread.deleteLater()
         self.worker = None
         self.worker_thread = None
+        if self.pending_regeneration:
+            self.pending_regeneration = False
+            self.generate_mask()
 
     def save_generated_bmp(self) -> None:
-        if self.current_phase16 is None:
+        if self.base_phase16 is None:
             self._show_error("Nothing to save", "Generate a phase mask first.")
             return
         path, _ = QFileDialog.getSaveFileName(
@@ -589,7 +760,7 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            save_meadowlark_bmp(self.current_phase16, path)
+            save_meadowlark_bmp(self.base_phase16, path)
         except Exception as exc:
             self._show_error("Save failed", str(exc))
             return

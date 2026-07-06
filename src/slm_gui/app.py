@@ -41,6 +41,7 @@ def apply_style(app: QApplication) -> None:
             border: 1px solid #cbd3dc;
             border-radius: 6px;
             padding: 7px 11px;
+            min-height: 22px;
         }
         QPushButton:hover {
             background: #eef4ff;
@@ -63,6 +64,7 @@ def apply_style(app: QApplication) -> None:
             border: 1px solid #cbd3dc;
             border-radius: 6px;
             padding: 5px 7px;
+            min-height: 22px;
         }
         QLabel#Preview {
             background: #101820;

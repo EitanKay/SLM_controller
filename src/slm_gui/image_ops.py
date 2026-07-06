@@ -97,6 +97,22 @@ def load_target_png(path: str | Path) -> np.ndarray:
         return np.array(gray, dtype=np.uint8)
 
 
+def load_target_image(path: str | Path) -> np.ndarray:
+    path = Path(path)
+    try:
+        with Image.open(path) as img:
+            if img.size != SLM_SIZE:
+                raise ImageValidationError(
+                    f"Expected 512x512 image, got {img.size[0]}x{img.size[1]}."
+                )
+            gray = img.convert("L")
+            return np.array(gray, dtype=np.uint8)
+    except ImageValidationError:
+        raise
+    except Exception as exc:
+        raise ImageValidationError(f"Could not open target image: {exc}") from exc
+
+
 def apply_discrete_transform(
     arr: np.ndarray,
     flip_x: bool = False,
@@ -124,6 +140,19 @@ def apply_target_transform(
     if invert:
         out = 255 - out
     return apply_discrete_transform(out, flip_x=flip_x, flip_y=flip_y)
+
+
+def apply_phase_offset_wraps(
+    value16_img: np.ndarray,
+    offset_x_wraps: float = 0.0,
+    offset_y_wraps: float = 0.0,
+) -> np.ndarray:
+    value16_img = np.asarray(value16_img, dtype=np.uint16)
+    height, width = value16_img.shape
+    x_ramp = np.linspace(0.0, float(offset_x_wraps), width, endpoint=False)
+    y_ramp = np.linspace(0.0, float(offset_y_wraps), height, endpoint=False)[:, None]
+    ramp16 = np.rint((x_ramp + y_ramp) * (MAX16 + 1)).astype(np.int64)
+    return np.mod(value16_img.astype(np.int64) + ramp16, MAX16 + 1).astype(np.uint16)
 
 
 def rotate_float_image(arr: np.ndarray, angle_degrees: float) -> np.ndarray:

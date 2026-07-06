@@ -7,8 +7,10 @@ from PIL import Image
 from src.slm_gui.image_ops import (
     ImageValidationError,
     apply_discrete_transform,
+    apply_phase_offset_wraps,
     apply_target_transform,
     load_strict_meadowlark_bmp,
+    load_target_image,
     load_target_png,
     pack_meadowlark_dvi_16bit_to_rgb,
     phase_radians_to_uint16,
@@ -56,6 +58,25 @@ def test_png_validation_requires_512_square(tmp_path: Path):
         load_target_png(path)
 
 
+def test_general_target_image_loader_accepts_pil_readable_images(tmp_path: Path):
+    arr = np.full((512, 512, 3), [10, 20, 30], dtype=np.uint8)
+    path = tmp_path / "target.jpg"
+    Image.fromarray(arr, mode="RGB").save(path)
+
+    loaded = load_target_image(path)
+
+    assert loaded.shape == (512, 512)
+    assert loaded.dtype == np.uint8
+
+
+def test_general_target_image_loader_rejects_wrong_size(tmp_path: Path):
+    path = tmp_path / "target.tif"
+    Image.fromarray(np.zeros((64, 512), dtype=np.uint8), mode="L").save(path)
+
+    with pytest.raises(ImageValidationError, match="Expected 512x512 image"):
+        load_target_image(path)
+
+
 def test_transforms_flip_rotate_and_invert():
     arr = np.array([[0, 1], [2, 3]], dtype=np.uint8)
 
@@ -82,6 +103,23 @@ def test_phase_radians_to_uint16_wraps_phase():
     assert 32767 <= value16[0, 1] <= 32768
     assert value16[1, 0] == 0
     assert 32767 <= value16[1, 1] <= 32768
+
+
+def test_apply_phase_offset_wraps_adds_modulo_ramps():
+    phase = np.zeros((2, 4), dtype=np.uint16)
+
+    shifted = apply_phase_offset_wraps(phase, offset_x_wraps=1.0, offset_y_wraps=-1.0)
+
+    np.testing.assert_array_equal(
+        shifted,
+        np.array(
+            [
+                [0, 16384, 32768, 49152],
+                [32768, 49152, 0, 16384],
+            ],
+            dtype=np.uint16,
+        ),
+    )
 
 
 def test_uint16_to_calibrated_input_uint8_scales_full_range():
