@@ -53,6 +53,8 @@ vendor/
 *.exe
 *.msi
 *.zip
+build/
+dist/
 
 # Secrets / local config
 .env
@@ -60,4 +62,4 @@ secrets.*
 config.local.*
 sdk_debug.txt
 
-
+old/

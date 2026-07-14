@@ -46,6 +46,41 @@ Check the current machine setup:
 .\.venv\Scripts\python.exe scripts\check_hardware_setup.py
 ```
 
+## Offline Executable Package
+
+To build a thumb-drive package for an offline Windows computer, use 64-bit
+Python on the build computer. Python 3.12 x64 is recommended for the most
+predictable PyInstaller behavior, but the build script will also allow other
+64-bit Python versions.
+
+Install build dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+```
+
+Build the folder bundle and zip:
+
+```powershell
+.\scripts\build_offline_gui.ps1
+```
+
+The build output is:
+
+```text
+dist\SLMControl\SLMControl.exe
+dist\SLMControl.zip
+```
+
+The zip includes the GUI executable, bundled Python runtime, Python
+dependencies, LUT files, and `slm-files\WFC_files\black.bmp`. It does not
+include Meadowlark or Thorlabs vendor SDK installers/drivers. The offline
+computer must still have the Meadowlark Blink DVI SDK installed at:
+
+```text
+C:\Program Files\Meadowlark Optics\Blink DVI\SDK
+```
+
 ## Hardware
 
 - Meadowlark 512x512 SLM

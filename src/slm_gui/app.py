@@ -2,10 +2,41 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 
 from src.slm_gui.main_window import MainWindow
+
+
+class _NullTextStream:
+    def write(self, _text: str) -> int:
+        return 0
+
+    def flush(self) -> None:
+        return None
+
+
+_LOG_HANDLE = None
+
+
+def ensure_standard_streams() -> None:
+    global _LOG_HANDLE
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    try:
+        log_dir = Path.home() / "AppData" / "Local" / "SLMControl"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        _LOG_HANDLE = open(log_dir / "SLMControl.log", "a", encoding="utf-8", buffering=1)
+        stream = _LOG_HANDLE
+    except Exception:
+        stream = _NullTextStream()
+
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
 
 
 def apply_style(app: QApplication) -> None:
@@ -92,6 +123,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    ensure_standard_streams()
     args = parse_args(argv)
     qt_argv = [sys.argv[0]] if argv is not None else sys.argv
     app = QApplication(qt_argv)
