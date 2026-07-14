@@ -63,4 +63,6 @@ config.local.*
 sdk_debug.txt
 
 old/
-scripts/calibration/frames/reference/*
+scripts/calibration/frames/reference/frames_B_constant_grating/*.bmp
+scripts/calibration/frames/reference/frames_A_mirror/*.bmp
+scripts/calibration/frames/
