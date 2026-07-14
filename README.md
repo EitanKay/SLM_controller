@@ -97,10 +97,14 @@ C:\Program Files\Meadowlark Optics\Blink DVI\SDK
 4. Build LUT calibration workflow for the operating wavelength.
 5. Document optical alignment and calibration procedures.
 
+For the active scan-to-LUT procedure, see
+[the calibration workflow](scripts/calibration/README.md).
+
 ## Repository Structure
 
 - `src/` - reusable Python modules
 - `scripts/` - runnable scripts and setup helpers
+- `scripts/calibration/` - calibration capture, analysis, frames, and guide
 - `documentation/` - project documentation
 - `notebooks/` - analysis notebooks
 - `slm-files/` - LUTs and local SLM assets

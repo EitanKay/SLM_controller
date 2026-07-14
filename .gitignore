@@ -37,11 +37,11 @@ outputs/
 *.npz
 *.png
 
-# Generated SLM frames
+# Generated SLM frames and calibration results
 outputs/bmp_frames/
 generated_frames/
-calibration_frames/
-output/polyfits
+scripts/calibration/frames/generated/
+scripts/calibration/results/
 slm-files/Masks/
 slm-files/WFC_files/
 
@@ -63,3 +63,4 @@ config.local.*
 sdk_debug.txt
 
 old/
+scripts/calibration/frames/reference/*

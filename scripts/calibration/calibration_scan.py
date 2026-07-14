@@ -9,8 +9,10 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 
-# Add project root to sys.path to resolve imports
-project_root = Path(__file__).resolve().parent.parent
+# The scan script lives in scripts/calibration; import project modules from the
+# repository root regardless of the caller's working directory.
+calibration_dir = Path(__file__).resolve().parent
+project_root = calibration_dir.parent.parent
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
@@ -37,6 +39,17 @@ EXPOSURE_TIME_MS = 0.04
 DLL_PATH = r"C:\Program Files\Thorlabs\Scientific Imaging\ThorImageCAM\bin"
 
 
+def prepare_output_directory(out_dir):
+    """Create a clean capture directory for the next calibration run."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    old_captures = [*out_dir.glob("*.tif"), *out_dir.glob("*.tiff")]
+    for capture in old_captures:
+        capture.unlink()
+
+    if old_captures:
+        print(f"Removed {len(old_captures)} previous camera capture(s) from: {out_dir}")
+
+
 def capture_calibration_step(mirror_val, generator, slm, camera, out_dir):
     print(f"Capturing image with mirror val: {mirror_val}")
     
@@ -61,14 +74,14 @@ def capture_calibration_step(mirror_val, generator, slm, camera, out_dir):
 
     # Capture and save using raw16 for true intensity data
     img = camera.get_image(output_format="raw16")
-    output_file = out_dir / f"camera_c  apture_{mirror_val:05d}.tif"
+    output_file = out_dir / f"camera_capture_{mirror_val:05d}.tif"
     img.save(output_file)
     print(f"Captured image saved to: {output_file}")
 
 
 def main():
-    out_dir = project_root / "output" / "calibration_frames"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = calibration_dir / "results" / "current"
+    prepare_output_directory(out_dir)
 
     generator = CalibrationFrameGenerator()
     mirror_values = np.linspace(0, 65535, SCAN_STEPS, dtype=np.uint16)
@@ -92,10 +105,11 @@ def main():
             print("Cleaning up SLM...")
             slm.clear_pattern()
             
-    except Exception as e:
-        print(f"Error during scan: {e}")
+    except Exception as exc:
+        print(f"Calibration scan failed: {exc}")
+        raise
 
-    print("Scan Complete")
+    print("Calibration scan complete")
 
 if __name__ == "__main__":
     main()

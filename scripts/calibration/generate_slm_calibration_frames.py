@@ -11,6 +11,7 @@ from PIL import Image
 SLM_W = 512
 SLM_H = 512
 MAX16 = 65535
+CALIBRATION_DIR = Path(__file__).resolve().parent
 
 
 class CalibrationFrameGenerator:
@@ -21,7 +22,7 @@ class CalibrationFrameGenerator:
     optionally save them as Meadowlark-compatible 24-bit BMP files.
 
     Example:
-        from calibration.generate_slm_calibration_frames import CalibrationFrameGenerator
+        from scripts.calibration.generate_slm_calibration_frames import CalibrationFrameGenerator
 
         gen = CalibrationFrameGenerator()
         frames, metadata = gen.generate_constant_mirror_scan_arrays(
@@ -456,8 +457,11 @@ def main():
     parser.add_argument(
         "--out",
         type=str,
-        default="slm_calibration_frames",
-        help="Output folder.",
+        default=None,
+        help=(
+            "Output folder. Defaults to frames/generated/<mode> inside the "
+            "calibration directory."
+        ),
     )
 
     parser.add_argument(
@@ -524,7 +528,11 @@ def main():
     )
 
     args = parser.parse_args()
-    out_dir = Path(args.out)
+    out_dir = (
+        Path(args.out)
+        if args.out is not None
+        else CALIBRATION_DIR / "frames" / "generated" / args.mode
+    )
 
     if args.n <= 0:
         raise ValueError("--n must be positive")
