@@ -2,17 +2,18 @@ import os
 
 import numpy as np
 import pytest
+from PIL import Image
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PyQt6")
 
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtWidgets import QFileDialog, QGroupBox, QPushButton, QTabWidget
+from PyQt6.QtWidgets import QFileDialog, QHBoxLayout, QPushButton, QTabWidget
 
 from src.slm_gui.backends import SimulatedSLMBackend
 from src.slm_gui.image_ops import load_strict_meadowlark_bmp
-from src.slm_gui.main_window import MainWindow
+from src.slm_gui.main_window import CollapsibleSection, MainWindow
 
 
 @pytest.fixture
@@ -128,15 +129,47 @@ def test_mask_generation_tab_is_first(qt_app, settings):
 def test_generation_tab_exposes_new_panels_and_removes_tem_button(qt_app, settings):
     window = MainWindow(backend_mode="sim", settings=settings)
     try:
-        group_titles = {box.title() for box in window.findChildren(QGroupBox)}
+        sections = window.findChildren(CollapsibleSection)
+        section_titles = [section.title() for section in sections]
         button_texts = {button.text() for button in window.findChildren(QPushButton)}
 
-        assert {"Algorithm", "Target", "Control"}.issubset(group_titles)
-        assert "Target and Algorithm" not in group_titles
-        assert "TEM / HG Target" not in group_titles
+        assert section_titles == ["Target", "Control", "Algorithm"]
         assert "Use TEM Target" not in button_texts
         assert "Apply" in button_texts
         assert "Load Image" in button_texts
+        assert "Load Config" in button_texts
+        assert "Save Config" in button_texts
+    finally:
+        window.close()
+
+
+def test_generation_sections_have_expected_defaults_and_toggle(qt_app, settings):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        assert window.target_section.is_expanded()
+        assert window.control_section.is_expanded()
+        assert not window.algorithm_section.is_expanded()
+        assert not window.target_section.content_widget.isHidden()
+        assert not window.control_section.content_widget.isHidden()
+        assert window.algorithm_section.content_widget.isHidden()
+
+        window.algorithm_section.header_button.click()
+
+        assert window.algorithm_section.is_expanded()
+        assert not window.algorithm_section.content_widget.isHidden()
+    finally:
+        window.close()
+
+
+def test_config_buttons_are_side_by_side(qt_app, settings):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        buttons = {button.text(): button for button in window.findChildren(QPushButton)}
+        load_button = buttons["Load Config"]
+        save_button = buttons["Save Config"]
+
+        assert load_button.parent() is save_button.parent()
+        assert isinstance(load_button.parent().layout(), QHBoxLayout)
     finally:
         window.close()
 
@@ -145,6 +178,16 @@ def test_default_generation_target_is_tem_hg_without_generating_mask(qt_app, set
     window = MainWindow(backend_mode="sim", settings=settings)
     try:
         assert window.target_source_combo.currentText() == "TEM/HG"
+        assert window.algorithm_combo.currentText() == "WGS-Leonardo"
+        assert window.input_profile_combo.currentData() == "uniform"
+        assert window.gaussian_waist_spin.value() == pytest.approx(140.8)
+        assert not window.gaussian_waist_spin.isEnabled()
+        assert window.gaussian_waist_label.isHidden()
+        assert window.gaussian_waist_spin.isHidden()
+        assert window.offset_x_spin.minimum() == -500.0
+        assert window.offset_x_spin.maximum() == 500.0
+        assert window.offset_y_spin.minimum() == -500.0
+        assert window.offset_y_spin.maximum() == 500.0
         assert window.current_target is not None
         assert window.base_phase16 is None
         assert window.send_ready is None
@@ -178,8 +221,95 @@ def test_algorithm_changes_wait_for_apply_but_control_changes_schedule_generatio
         window.algorithm_combo.setCurrentText("GS")
         assert not window.regen_timer.isActive()
 
+        window.input_profile_combo.setCurrentText("Gaussian")
+        window.gaussian_waist_spin.setValue(125.0)
+        assert window.gaussian_waist_spin.isEnabled()
+        assert not window.gaussian_waist_label.isHidden()
+        assert not window.gaussian_waist_spin.isHidden()
+        assert not window.regen_timer.isActive()
+
         window.invert_check.setChecked(True)
         assert window.regen_timer.isActive()
+    finally:
+        window.close()
+
+
+def test_custom_input_beam_loads_without_automatic_generation(
+    qt_app, settings, monkeypatch, tmp_path
+):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        rgb = np.zeros((512, 512, 3), dtype=np.uint8)
+        rgb[..., 1] = 255
+        image_path = tmp_path / "measured-beam.png"
+        Image.fromarray(rgb, mode="RGB").save(image_path)
+        monkeypatch.setattr(
+            QFileDialog,
+            "getOpenFileName",
+            lambda *args, **kwargs: (str(image_path), ""),
+        )
+        window.input_profile_combo.setCurrentText("Custom")
+        window.regen_timer.stop()
+
+        window.open_custom_input_image()
+
+        assert not window.custom_input_row_label.isHidden()
+        assert not window.custom_input_widget.isHidden()
+        assert window.custom_input_name == "measured-beam.png"
+        assert window.custom_input_amplitude.shape == (512, 512)
+        assert window.custom_input_amplitude[0, 0] == pytest.approx(150 / 255)
+        assert not window.regen_timer.isActive()
+    finally:
+        window.close()
+
+
+def test_custom_input_beam_must_be_loaded_before_generation(
+    qt_app, settings, monkeypatch
+):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    errors = []
+    try:
+        monkeypatch.setattr(window, "_show_error", lambda title, message: errors.append((title, message)))
+        window.input_profile_combo.setCurrentText("Custom")
+
+        window.generate_mask()
+
+        assert errors == [("No input beam", "Load a custom input beam image first.")]
+        assert window.worker_thread is None
+    finally:
+        window.close()
+
+
+def test_input_beam_settings_are_persisted(qt_app, settings):
+    first = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        first.input_profile_combo.setCurrentText("Gaussian")
+        first.gaussian_waist_spin.setValue(173.5)
+    finally:
+        first.close()
+
+    restored = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        assert restored.input_profile_combo.currentData() == "gaussian"
+        assert restored.gaussian_waist_spin.value() == pytest.approx(173.5)
+        assert restored.gaussian_waist_spin.isEnabled()
+        assert not restored.gaussian_waist_label.isHidden()
+        assert not restored.gaussian_waist_spin.isHidden()
+    finally:
+        restored.close()
+
+
+def test_invalid_saved_input_beam_settings_fall_back_to_defaults(qt_app, settings):
+    settings.setValue("generation/input_profile", "invalid")
+    settings.setValue("generation/gaussian_waist_px", "not-a-number")
+
+    window = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        assert window.input_profile_combo.currentData() == "uniform"
+        assert window.gaussian_waist_spin.value() == pytest.approx(140.8)
+        assert not window.gaussian_waist_spin.isEnabled()
+        assert window.gaussian_waist_label.isHidden()
+        assert window.gaussian_waist_spin.isHidden()
     finally:
         window.close()
 
@@ -287,6 +417,135 @@ def test_save_generated_bmp_uses_base_phase_not_offset_final(
         saved, _rgb = load_strict_meadowlark_bmp(out_path)
 
         np.testing.assert_array_equal(saved, base)
+    finally:
+        window.close()
+
+
+def test_generation_config_round_trip_restores_all_controls_and_embedded_images(
+    qt_app, settings, monkeypatch, tmp_path
+):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    try:
+        window.config_directory = tmp_path / "configs"
+        target = np.arange(512 * 512, dtype=np.uint32).reshape(512, 512).astype(np.uint8)
+        beam_pixels = np.full((512, 512), 51, dtype=np.uint8)
+        beam_pixels[100:200, 100:200] = 204
+        window.file_target = target.copy()
+        window.file_target_name = "target-source.png"
+        window.target_source_combo.setCurrentText("from file")
+        window.hg_n_spin.setValue(3)
+        window.hg_m_spin.setValue(5)
+        window.hg_waist_spin.setValue(92.5)
+        window.hg_norm_combo.setCurrentText("power")
+        window.hg_rotation_spin.setValue(-22.5)
+        window.algorithm_combo.setCurrentText("WGS-Wu")
+        window.iterations_spin.setValue(81)
+        window.seed_spin.setValue(901)
+        window.input_profile_combo.setCurrentText("Custom")
+        window.gaussian_waist_spin.setValue(188.5)
+        window.custom_input_amplitude = beam_pixels.astype(np.float64) / 255.0
+        window.custom_input_name = "beam-source.tif"
+        window.invert_check.setChecked(True)
+        window.flip_x_check.setChecked(True)
+        window.flip_y_check.setChecked(False)
+        window.offset_x_spin.setValue(11.25)
+        window.offset_y_spin.setValue(-9.5)
+
+        chosen_save = tmp_path / "configs" / "experiment"
+        save_dialog_initial_paths = []
+
+        def choose_save(*args, **kwargs):
+            save_dialog_initial_paths.append(args[2])
+            return str(chosen_save), ""
+
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", choose_save)
+        window.save_generation_config()
+        saved_path = chosen_save.with_suffix(".slmconfig")
+
+        assert save_dialog_initial_paths == [
+            str(window.config_directory / "mask_config.slmconfig")
+        ]
+        assert saved_path.is_file()
+
+        window.target_source_combo.setCurrentText("TEM/HG")
+        window.hg_n_spin.setValue(0)
+        window.algorithm_combo.setCurrentText("GS")
+        window.iterations_spin.setValue(2)
+        window.input_profile_combo.setCurrentText("Uniform (plane wave)")
+        window.file_target = None
+        window.custom_input_amplitude = None
+        window.invert_check.setChecked(False)
+        window.flip_x_check.setChecked(False)
+        window.offset_x_spin.setValue(0)
+        window.offset_y_spin.setValue(0)
+
+        monkeypatch.setattr(
+            QFileDialog,
+            "getOpenFileName",
+            lambda *args, **kwargs: (str(saved_path), ""),
+        )
+        generation_requests = []
+        monkeypatch.setattr(
+            window, "_schedule_generation", lambda: generation_requests.append(True)
+        )
+
+        window.load_generation_config()
+
+        assert generation_requests == [True]
+        assert window.target_source_combo.currentText() == "from file"
+        assert window.hg_n_spin.value() == 3
+        assert window.hg_m_spin.value() == 5
+        assert window.hg_waist_spin.value() == pytest.approx(92.5)
+        assert window.hg_norm_combo.currentText() == "power"
+        assert window.hg_rotation_spin.value() == pytest.approx(-22.5)
+        assert window.algorithm_combo.currentText() == "WGS-Wu"
+        assert window.iterations_spin.value() == 81
+        assert window.seed_spin.value() == 901
+        assert window.input_profile_combo.currentData() == "custom"
+        assert window.gaussian_waist_spin.value() == pytest.approx(188.5)
+        assert window.invert_check.isChecked()
+        assert window.flip_x_check.isChecked()
+        assert not window.flip_y_check.isChecked()
+        assert window.offset_x_spin.value() == pytest.approx(11.25)
+        assert window.offset_y_spin.value() == pytest.approx(-9.5)
+        assert window.file_target_name == "target-source.png"
+        assert window.custom_input_name == "beam-source.tif"
+        np.testing.assert_array_equal(window.file_target, target)
+        np.testing.assert_array_equal(
+            np.uint8(np.rint(window.custom_input_amplitude * 255)), beam_pixels
+        )
+    finally:
+        window.close()
+
+
+def test_invalid_generation_config_does_not_change_current_state(
+    qt_app, settings, monkeypatch, tmp_path
+):
+    window = MainWindow(backend_mode="sim", settings=settings)
+    errors = []
+    try:
+        window.config_directory = tmp_path
+        invalid_path = tmp_path / "invalid.slmconfig"
+        invalid_path.write_text('{"format": "SLMControl mask configuration", "version": 99}')
+        window.algorithm_combo.setCurrentText("GS")
+        window.iterations_spin.setValue(17)
+        window.regen_timer.stop()
+        monkeypatch.setattr(
+            QFileDialog,
+            "getOpenFileName",
+            lambda *args, **kwargs: (str(invalid_path), ""),
+        )
+        monkeypatch.setattr(
+            window, "_show_error", lambda title, message: errors.append((title, message))
+        )
+
+        window.load_generation_config()
+
+        assert window.algorithm_combo.currentText() == "GS"
+        assert window.iterations_spin.value() == 17
+        assert not window.regen_timer.isActive()
+        assert errors and errors[0][0] == "Invalid configuration"
+        assert "Unsupported mask configuration version" in errors[0][1]
     finally:
         window.close()
 

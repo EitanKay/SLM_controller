@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import sys
 from pathlib import Path
 
@@ -18,6 +19,31 @@ class _NullTextStream:
 
 
 _LOG_HANDLE = None
+
+
+def configure_windows_dpi_awareness() -> None:
+    """Set process DPI awareness before Qt or the Blink SDK creates a window."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        # Windows 10+: per-monitor-v2 handles mixed-DPI monitor arrangements best.
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        # Windows 8.1+: PROCESS_PER_MONITOR_DPI_AWARE.
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            return
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
 
 
 def ensure_standard_streams() -> None:
@@ -52,10 +78,21 @@ def apply_style(app: QApplication) -> None:
         QMainWindow, QTabWidget::pane {
             background: #f6f7f9;
         }
-        QFrame#TopBar, QGroupBox {
+        QFrame#TopBar, QFrame#CollapsibleSection, QGroupBox {
             background: #ffffff;
             border: 1px solid #d7dce2;
             border-radius: 8px;
+        }
+        QToolButton#CollapsibleHeader {
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-weight: 600;
+            text-align: left;
+        }
+        QToolButton#CollapsibleHeader:hover {
+            background: #eef4ff;
         }
         QGroupBox {
             margin-top: 14px;
@@ -126,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     ensure_standard_streams()
     args = parse_args(argv)
     qt_argv = [sys.argv[0]] if argv is not None else sys.argv
+    configure_windows_dpi_awareness()
     app = QApplication(qt_argv)
     apply_style(app)
     window = MainWindow(backend_mode="sim" if args.sim else "hardware")

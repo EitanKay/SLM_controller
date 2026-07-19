@@ -40,6 +40,24 @@ Run the GUI in simulator mode, which does not require the Meadowlark SDK or hard
 .\scripts\run_gui_sim.ps1
 ```
 
+In **Mask Generation → Algorithm**, choose the modeled input beam used by GS/WGS:
+
+- **Uniform (plane wave)** preserves the original behavior and is the first-run default.
+- **Gaussian** uses the field amplitude `A(r) = exp(-r²/w²)`. The configurable
+  waist `w` is the 1/e² intensity radius in SLM pixels (`sigma_intensity = w/2`).
+- **Custom** loads any Pillow-readable 512×512 image, converts it to grayscale,
+  and maps pixel values directly to field amplitude from 0 to 1.
+
+The input-beam choice and Gaussian waist are remembered between GUI sessions.
+WGS-Leonardo is the default balanced hologram algorithm; the camera should still be
+used to validate the best method and waist for the physical optical setup.
+
+The Target, Control, and Algorithm panels are collapsible. Use **Save Config** and
+**Load Config** under Control to reuse all mask-generation settings. Configurations
+are self-contained `.slmconfig` files stored by default in
+`%LOCALAPPDATA%\SLMControl\configs`; loaded target and custom-beam images are embedded
+in the file.
+
 Check the current machine setup:
 
 ```powershell

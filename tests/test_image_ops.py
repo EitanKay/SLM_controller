@@ -9,6 +9,7 @@ from src.slm_gui.image_ops import (
     apply_discrete_transform,
     apply_phase_offset_wraps,
     apply_target_transform,
+    load_input_beam_image,
     load_strict_meadowlark_bmp,
     load_target_image,
     load_target_png,
@@ -75,6 +76,32 @@ def test_general_target_image_loader_rejects_wrong_size(tmp_path: Path):
 
     with pytest.raises(ImageValidationError, match="Expected 512x512 image"):
         load_target_image(path)
+
+
+def test_input_beam_loader_converts_rgb_to_normalized_grayscale(tmp_path: Path):
+    rgb = np.zeros((512, 512, 3), dtype=np.uint8)
+    rgb[..., 0] = 255
+    path = tmp_path / "beam.png"
+    Image.fromarray(rgb, mode="RGB").save(path)
+
+    amplitude = load_input_beam_image(path)
+
+    assert amplitude.shape == (512, 512)
+    assert amplitude.dtype == np.float64
+    assert amplitude.min() == pytest.approx(76 / 255)
+    assert amplitude.max() == pytest.approx(76 / 255)
+
+
+def test_input_beam_loader_rejects_wrong_size_and_all_black(tmp_path: Path):
+    wrong_size = tmp_path / "wrong.png"
+    Image.fromarray(np.ones((64, 512), dtype=np.uint8), mode="L").save(wrong_size)
+    with pytest.raises(ImageValidationError, match="Expected 512x512 image"):
+        load_input_beam_image(wrong_size)
+
+    black = tmp_path / "black.png"
+    Image.fromarray(np.zeros((512, 512), dtype=np.uint8), mode="L").save(black)
+    with pytest.raises(ImageValidationError, match="entirely black"):
+        load_input_beam_image(black)
 
 
 def test_transforms_flip_rotate_and_invert():

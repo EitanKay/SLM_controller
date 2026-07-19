@@ -13,6 +13,79 @@ from src.slm_gui.image_ops import (
 )
 
 
+DEFAULT_GAUSSIAN_WAIST_PX = 140.8
+MIN_GAUSSIAN_WAIST_PX = 1.0
+MAX_GAUSSIAN_WAIST_PX = 2048.0
+INPUT_PROFILES = ("uniform", "gaussian", "custom")
+
+
+def generate_input_amplitude(
+    profile: str = "uniform",
+    gaussian_waist_px: float = DEFAULT_GAUSSIAN_WAIST_PX,
+    custom_input_amplitude: np.ndarray | None = None,
+) -> np.ndarray:
+    """Build the modeled SLM-plane field amplitude for hologram generation."""
+    profile_key = str(profile).strip().lower()
+    if profile_key not in INPUT_PROFILES:
+        raise ValueError(
+            f"Unsupported input profile: {profile!r}. "
+            f"Choose one of {', '.join(INPUT_PROFILES)}."
+        )
+
+    if profile_key == "uniform":
+        return np.ones(SLM_SHAPE, dtype=np.float64)
+
+    if profile_key == "custom":
+        if custom_input_amplitude is None:
+            raise ValueError("Load a custom input beam image first.")
+        amplitude = _validated_input_amplitude(custom_input_amplitude)
+        if amplitude.max() > 1.0:
+            raise ValueError("Custom input amplitude values must be between 0 and 1.")
+        return amplitude.copy()
+
+    try:
+        waist = float(gaussian_waist_px)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Gaussian beam waist must be a number in pixels.") from exc
+    if not np.isfinite(waist) or not (
+        MIN_GAUSSIAN_WAIST_PX <= waist <= MAX_GAUSSIAN_WAIST_PX
+    ):
+        raise ValueError(
+            "Gaussian beam waist must be between "
+            f"{MIN_GAUSSIAN_WAIST_PX:g} and {MAX_GAUSSIAN_WAIST_PX:g} pixels."
+        )
+
+    ny, nx = SLM_SHAPE
+    yy, xx = np.indices(SLM_SHAPE, dtype=np.float64)
+    cx = (nx - 1) / 2
+    cy = (ny - 1) / 2
+    radius_squared = (xx - cx) ** 2 + (yy - cy) ** 2
+    amplitude = np.exp(-radius_squared / waist**2)
+    amplitude /= amplitude.max()
+    return amplitude
+
+
+def _validated_input_amplitude(input_amp: np.ndarray | None) -> np.ndarray:
+    if input_amp is None:
+        return generate_input_amplitude("uniform")
+
+    amplitude = np.asarray(input_amp, dtype=np.float64)
+    if amplitude.shape != SLM_SHAPE:
+        raise ValueError(
+            f"Expected input amplitude shape {SLM_SHAPE}, got {amplitude.shape}."
+        )
+    if not np.all(np.isfinite(amplitude)):
+        raise ValueError("Input amplitude must contain only finite values.")
+    if np.any(amplitude < 0) or amplitude.max() <= 0:
+        raise ValueError("Input amplitude must be non-negative and not identically zero.")
+    return amplitude
+
+
+def _initial_phase(shape: tuple[int, int], seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.uniform(0, 2 * np.pi, size=shape)
+
+
 def target_uint8_to_amplitude(target: np.ndarray) -> np.ndarray:
     arr = np.asarray(target, dtype=np.float64)
     if arr.shape != SLM_SHAPE:
@@ -22,18 +95,22 @@ def target_uint8_to_amplitude(target: np.ndarray) -> np.ndarray:
 
 
 def gerchberg_saxton(
-    target: np.ndarray, iterations: int = 100, seed: int = 0
+    target: np.ndarray,
+    iterations: int = 100,
+    seed: int = 0,
+    input_amp: np.ndarray | None = None,
 ) -> np.ndarray:
     target_amp = target_uint8_to_amplitude(target)
-    rng = np.random.default_rng(seed)
+    input_amp = _validated_input_amplitude(input_amp)
     ny, nx = target_amp.shape
-    field_slm = np.exp(1j * rng.uniform(0, 2 * np.pi, size=(ny, nx)))
+    phase = _initial_phase((ny, nx), seed)
+    field_slm = input_amp * np.exp(1j * phase)
 
     for _ in range(int(iterations)):
         field_fourier = np.fft.fftshift(np.fft.fft2(field_slm))
         field_fourier = target_amp * np.exp(1j * np.angle(field_fourier))
         field_slm = np.fft.ifft2(np.fft.ifftshift(field_fourier))
-        field_slm = np.exp(1j * np.angle(field_slm))
+        field_slm = input_amp * np.exp(1j * np.angle(field_slm))
 
     return np.mod(np.angle(field_slm), 2 * np.pi)
 
@@ -52,18 +129,31 @@ class SlmsuiteUnavailableError(RuntimeError):
 
 
 def weighted_gerchberg_saxton(
-    target: np.ndarray, iterations: int = 30, seed: int = 0
+    target: np.ndarray,
+    iterations: int = 30,
+    seed: int = 0,
+    input_amp: np.ndarray | None = None,
 ) -> np.ndarray:
     try:
         return weighted_gerchberg_saxton_slmsuite(
-            target, iterations=iterations, method="WGS-Kim"
+            target,
+            iterations=iterations,
+            method="WGS-Kim",
+            seed=seed,
+            input_amp=input_amp,
         )
     except SlmsuiteUnavailableError:
-        return weighted_gerchberg_saxton_numpy(target, iterations=iterations, seed=seed)
+        return weighted_gerchberg_saxton_numpy(
+            target, iterations=iterations, seed=seed, input_amp=input_amp
+        )
 
 
 def weighted_gerchberg_saxton_slmsuite(
-    target: np.ndarray, iterations: int = 30, method: str = "WGS-Kim"
+    target: np.ndarray,
+    iterations: int = 30,
+    method: str = "WGS-Kim",
+    seed: int = 0,
+    input_amp: np.ndarray | None = None,
 ) -> np.ndarray:
     try:
         from slmsuite.holography.algorithms import Hologram
@@ -73,22 +163,33 @@ def weighted_gerchberg_saxton_slmsuite(
         ) from exc
 
     target_amp = target_uint8_to_amplitude(target)
+    input_amp = _validated_input_amplitude(input_amp)
+    phase = _initial_phase(SLM_SHAPE, seed)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        hologram = Hologram(target=target_amp, slm_shape=SLM_SHAPE)
+        hologram = Hologram(
+            target=target_amp,
+            amp=input_amp,
+            phase=phase,
+            slm_shape=SLM_SHAPE,
+        )
         hologram.optimize(method=method, maxiter=int(iterations))
         phase = hologram.get_phase()
     return np.mod(np.asarray(phase, dtype=np.float64), 2 * np.pi)
 
 
 def weighted_gerchberg_saxton_numpy(
-    target: np.ndarray, iterations: int = 30, seed: int = 0
+    target: np.ndarray,
+    iterations: int = 30,
+    seed: int = 0,
+    input_amp: np.ndarray | None = None,
 ) -> np.ndarray:
     """Small NumPy WGS fallback for environments where slmsuite cannot import."""
     target_amp = target_uint8_to_amplitude(target)
-    rng = np.random.default_rng(seed)
+    input_amp = _validated_input_amplitude(input_amp)
     ny, nx = target_amp.shape
-    field_slm = np.exp(1j * rng.uniform(0, 2 * np.pi, size=(ny, nx)))
+    phase = _initial_phase((ny, nx), seed)
+    field_slm = input_amp * np.exp(1j * phase)
     weights = np.ones_like(target_amp)
     signal = target_amp > 0
     eps = 1e-12
@@ -105,31 +206,51 @@ def weighted_gerchberg_saxton_numpy(
         enforced_amp = target_amp * weights
         field_fourier = enforced_amp * np.exp(1j * np.angle(field_fourier))
         field_slm = np.fft.ifft2(np.fft.ifftshift(field_fourier))
-        field_slm = np.exp(1j * np.angle(field_slm))
+        field_slm = input_amp * np.exp(1j * np.angle(field_slm))
 
     return np.mod(np.angle(field_slm), 2 * np.pi)
 
 
 def generate_phase_uint16(
     target: np.ndarray,
-    algorithm: str = "WGS",
+    algorithm: str = "WGS-Leonardo",
     iterations: int = 30,
     seed: int = 0,
+    input_profile: str = "uniform",
+    gaussian_waist_px: float = DEFAULT_GAUSSIAN_WAIST_PX,
+    custom_input_amplitude: np.ndarray | None = None,
 ) -> np.ndarray:
+    input_amp = generate_input_amplitude(
+        profile=input_profile,
+        gaussian_waist_px=gaussian_waist_px,
+        custom_input_amplitude=custom_input_amplitude,
+    )
     algorithm = algorithm.upper()
     if algorithm == "GS":
-        phase = gerchberg_saxton(target, iterations=iterations, seed=seed)
+        phase = gerchberg_saxton(
+            target,
+            iterations=iterations,
+            seed=seed,
+            input_amp=input_amp,
+        )
     elif algorithm in SLMSUITE_WGS_METHODS:
         method = SLMSUITE_WGS_METHODS[algorithm]
         try:
             phase = weighted_gerchberg_saxton_slmsuite(
-                target, iterations=iterations, method=method
+                target,
+                iterations=iterations,
+                method=method,
+                seed=seed,
+                input_amp=input_amp,
             )
         except SlmsuiteUnavailableError:
             if method != "WGS-Kim":
                 raise
             phase = weighted_gerchberg_saxton_numpy(
-                target, iterations=iterations, seed=seed
+                target,
+                iterations=iterations,
+                seed=seed,
+                input_amp=input_amp,
             )
     else:
         raise ValueError(f"Unsupported holography algorithm: {algorithm}")

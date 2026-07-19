@@ -51,16 +51,6 @@ class slm_512_driver:
         self._out_buffer_idx = 0
         self._in_buffer = None
 
-    @staticmethod
-    def _set_dpi_awareness():
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            try:
-                ctypes.windll.user32.SetProcessDPIAware()
-            except Exception:
-                pass
-
     def _declare_functions(self):
         self.slm.Create_SDK.argtypes = [c_bool]
         self.slm.Create_SDK.restype = None
@@ -94,7 +84,6 @@ class slm_512_driver:
             raise FileNotFoundError(f"SDK directory not found: {self.sdk_dir}")
 
         os.add_dll_directory(str(self.sdk_dir))
-        self._set_dpi_awareness()
         self.slm = ctypes.CDLL(str(self.sdk_dir / "Blink_C_wrapper.dll"))
         self._declare_functions()
 

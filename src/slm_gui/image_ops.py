@@ -113,6 +113,25 @@ def load_target_image(path: str | Path) -> np.ndarray:
         raise ImageValidationError(f"Could not open target image: {exc}") from exc
 
 
+def load_input_beam_image(path: str | Path) -> np.ndarray:
+    path = Path(path)
+    try:
+        with Image.open(path) as img:
+            if img.size != SLM_SIZE:
+                raise ImageValidationError(
+                    f"Expected 512x512 image, got {img.size[0]}x{img.size[1]}."
+                )
+            gray = np.array(img.convert("L"), dtype=np.uint8)
+    except ImageValidationError:
+        raise
+    except Exception as exc:
+        raise ImageValidationError(f"Could not open input beam image: {exc}") from exc
+
+    if gray.max() == 0:
+        raise ImageValidationError("Input beam image cannot be entirely black.")
+    return np.ascontiguousarray(gray, dtype=np.float64) / 255.0
+
+
 def apply_discrete_transform(
     arr: np.ndarray,
     flip_x: bool = False,
