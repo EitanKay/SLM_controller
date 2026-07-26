@@ -1,4 +1,4 @@
-# SLM Project Wiki — first draft
+# SLM Project Wiki
 
 This is a small hand-over wiki for the Meadowlark 512×512 SLM project in the Bekenstein Lab.
 It is meant to sit next to the codebase and the longer Overleaf guide, not to replace them.
