@@ -42,3 +42,4 @@ Keep this small and practical. Every page should answer one of two questions:
 - What should I not waste two weeks rediscovering?
 
 Avoid hiding important operational knowledge in slide decks, notebooks, or private messages. If it matters for the next user, put it here.
+

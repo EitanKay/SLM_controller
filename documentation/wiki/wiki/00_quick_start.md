@@ -9,6 +9,7 @@ This page is intentionally short. Use it before trying HG modes, vortex beams, o
 - Follow the lab laser-safety procedure.
 - Verify that beam height and beam path are safe and terminated.
 - Make sure the SLM active area is not exposed to unnecessary dust or contact.
+- Assemble the basic optics layout. For a simple layout, you may use the suggested [holography layout](03_hardware_optical_layout).
 - Confirm that the correct computer/display configuration is being used.
 - Confirm which LUT/WFC should be loaded for the wavelength in use.
 
@@ -18,24 +19,19 @@ This page is intentionally short. Use it before trying HG modes, vortex beams, o
 2. Turn on the Meadowlark DVI controller.
 3. Turn on the laser at low power.
 4. Open the SLM controller repo on the lab PC.
-5. Run the hardware setup check:
+
+5. Launch the GUI:
 
    ```powershell
-   .\.venv\Scripts\python.exe scripts\check_hardware_setup.py
+    .\dist\SLMControl\SLMControl.exe
    ```
 
-6. Launch the GUI:
-
-   ```powershell
-   .\scripts\run_gui.ps1
-   ```
-
-7. Display the simplest test mask first:
+6. Display the simplest test mask first:
 
    - flat mask, then
    - linear ramp / blazed grating.
 
-8. Look at the Fourier plane with the camera or a safe viewing method.
+7. Look at the Fourier plane with the camera or a safe viewing method.
 
 ## Expected result
 
