@@ -67,3 +67,5 @@ scripts/calibration/frames/reference/frames_B_constant_grating/*.bmp
 scripts\calibration\frames\reference\frames_B_constant_grating\*.bmp
 scripts/calibration/frames/reference/frames_A_mirror/*.bmp
 scripts/calibration/frames/
+documentation/schematics/ComponentLibrary.svg
+documentation/schematics/HologramSetup.svg
