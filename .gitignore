@@ -54,7 +54,6 @@ vendor/
 *.msi
 *.zip
 build/
-dist/
 
 # Secrets / local config
 .env
